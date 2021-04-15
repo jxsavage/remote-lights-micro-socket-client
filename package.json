@@ -1,0 +1,44 @@
+{
+  "name": "remote-lights-pi",
+  "version": "1.0.0",
+  "description": "",
+  "main": "src",
+  "types": "src",
+  "type": "commonjs",
+  "scripts": {
+    "start:dev": "node --trace-warnings --inspect=0.0.0.0 -r ts-node/register src/index.ts",
+    "dev": "nodemon --config nodemon.json",
+    "build": "tsc",
+    "start": "nodemon --config nodemon.prod.json",
+    "start:prod": "node dist/index.js",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "find-node": "ps -aef | grep node"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "^13.9.1",
+    "@types/serialport": "^8.0.0",
+    "@types/socket.io": "^2.1.4",
+    "@types/socket.io-client": "^1.4.32",
+    "@typescript-eslint/eslint-plugin": "^2.27.0",
+    "@typescript-eslint/parser": "^2.27.0",
+    "eslint": "^6.8.0",
+    "eslint-config-airbnb-typescript": "^7.2.0",
+    "eslint-import-resolver-typescript": "^2.0.0",
+    "eslint-plugin-import": "^2.20.1"
+  },
+  "dependencies": {
+    "chalk": "^4.0.0",
+    "deep-object-diff": "^1.1.0",
+    "dotenv": "^8.2.0",
+    "nodemon": "^2.0.2",
+    "redux": "^4.0.5",
+    "serialport": "^8.0.7",
+    "socket.io": "^4.0.1",
+    "socket.io-client": "^4.0.1",
+    "ts-node": "^9.1.1",
+    "typescript": "^3.8.3"
+  }
+}

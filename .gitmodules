@@ -1,0 +1,3 @@
+[submodule "src/Shared"]
+	path = src/Shared
+	url = git@github.com:jxsavage/remote-lights-shared.git
