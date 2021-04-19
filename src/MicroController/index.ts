@@ -7,8 +7,10 @@ import { SocketDestination } from '../Shared/socket';
 import { SerialWithParser } from '../SocketClient/serial';
 import log from '../Shared/logger';
 import { generateId, convertMicroResponseToMicroEntity, } from '../Shared/store/utils';
+import { MicroActionType, MicroEntityTypes } from '../Shared/store/actions';
+
 const {
-  GET_STATE, RESET_MICRO_STATE, RESIZE_SEGMENTS_FROM_BOUNDARIES,
+  GET_STATE, RESIZE_SEGMENTS_FROM_BOUNDARIES,
   SET_SEGMENT_EFFECT, SPLIT_SEGMENT, MERGE_SEGMENTS, SET_MICRO_BRIGHTNESS,
   SET_MICRO_ID, SET_SEGMENT_ID,
 } = MICRO_COMMAND;
@@ -21,6 +23,7 @@ type MicroResponse = number[];
 export class MicroController implements MicroActionsInterface {
   microId!: MicroState['microId'];
   serial: SerialWithParser;
+  socket: SocketIOClient.Socket;
   dispatch: (action: AllActions, destination: string) => void;
   initialized: boolean;
   static cmdGetInfo = `${JSON.stringify([MICRO_COMMAND.GET_STATE])}\n`;
@@ -28,13 +31,15 @@ export class MicroController implements MicroActionsInterface {
   constructor(
     serialPort: SerialWithParser,
     dispatch: (action: AllActions, destination: string) => void,
+    socket: SocketIOClient.Socket
   ){
     this.initialized = false;
     this.serial = serialPort;
+    this.socket = socket;
     this.dispatch = dispatch;
 
     
-    const { serial: { parser, port }, dataHandler } = this;
+    const { serial: { parser }, dataHandler } = this;
     parser.on('data', dataHandler);
     
   }
@@ -97,11 +102,12 @@ export class MicroController implements MicroActionsInterface {
           return segment;
         })
       }
-      this.dispatch(
-        addMicros(
-          convertMicroResponseToMicroEntity(microState)
-      ), SocketDestination.WEB_CLIENTS);
+      // this.dispatch(
+      //   addMicros(
+      //     convertMicroResponseToMicroEntity(microState)
+      // ), SocketDestination.WEB_CLIENTS);
       this.microId = microState[1];
+      this.socket.emit(MicroEntityTypes.ADD_MICROS, convertMicroResponseToMicroEntity(microState));
     }
     const handleResponse = (response: MicroResponse): void => {
       const responseType = response[0];
@@ -146,11 +152,18 @@ export class MicroController implements MicroActionsInterface {
       const initMsg = setInterval(() => console.log('Waiting for initialization...'), 3000);
       const initializing = setInterval((resolve) => {
         if(this.microId) {
-          console.log(`MicroController ${this.microId} Initialized.`);
+          log('info', `Microconroller ${this.microId} initialized.`)
           this.initialized = true;
           resolve(this);
           clearInterval(initializing);
           clearInterval(initMsg);
+          const { socket, microId } = this;
+          socket.emit('INIT_MICRO', microId);
+          socket.on(MicroActionType.SPLIT_SEGMENT, this.splitSegment);
+          socket.on(MicroActionType.MERGE_SEGMENTS, this.mergeSegments);
+          socket.on(MicroActionType.SET_SEGMENT_EFFECT, this.setSegmentEffect);
+          socket.on(MicroActionType.SET_MICRO_BRIGHTNESS, this.setMicroBrightness);
+          socket.on(MicroActionType.RESIZE_SEGMENTS_FROM_BOUNDARIES, this.resizeSegmentsFromBoundaries);
         }
       }, 100, resolve);
 

@@ -1,16 +1,20 @@
-import SerialPort, { parsers, list } from 'serialport';
+import SerialPort, { parsers } from 'serialport';
 import MicroController from '../MicroController';
 import {
   MicroState, removeMicros, AllActions,
 } from '../Shared/store';
 import { SocketDestination } from '../Shared/socket';
-import { addMicroChannel } from './socket';
+import getSocket, { addMicroChannel, getMicroSocketInstance } from './socket';
 import log from '../Shared/logger';
 import {readdir} from 'fs';
 
 
 
-
+/**
+ * Scans for serials based on path.
+ * Looks for /dev/teensy[0-9]+
+ * @returns Array of PortInfo about valid microcontrollers.
+ */
 export function scanSerial(): Promise<SerialPort.PortInfo[]> {
   return new Promise((resolve, reject) => {
     readdir('/dev', (err, files) => {
@@ -36,14 +40,25 @@ export function scanSerial(): Promise<SerialPort.PortInfo[]> {
   });
 }
 const {Readline} = parsers;
+interface SerialPortDisconnectReason {
+  disconnected: boolean;
+  message: string;
+  stack: string;
+}
 export const microIdSerialMap = new Map<MicroState['microId'], MicroController>();
-
 type portPath = string;
 export type SerialWithParser = {
   port: SerialPort;
   parser: parsers.Readline;
 }
 const portPathSerialMap = new Map<portPath, SerialPort>();
+const socket = getSocket();
+/**
+ * Attaches to a known microcontroller and attaches
+ * readline parser and 'close' event listener.
+ * @param portInfo known microcontroller port
+ * @returns Serial port connection with parser attached.
+ */
 export function initSerialPort(portInfo: SerialPort.PortInfo): SerialWithParser {
   const {path} = portInfo;
   log('bgGreen', `Connecting to microcontroller on port ${path}`);
@@ -60,13 +75,19 @@ export function initSerialPort(portInfo: SerialPort.PortInfo): SerialWithParser 
   );
   port.pipe(parser);
   portPathSerialMap.set(port.path, port);
-  port.on('disconnect', () => {
+  port.on('close', ({disconnected, message, stack}: SerialPortDisconnectReason) => {
+    log('bgRed', `Serial port ${port.path} disconnect detected.`);
+    log('bgRed', `Was disconnected? ${disconnected}`);
+    log('bgRed', `Message: ${message}`);
+    log('bgRed', `Stack: ${stack}`);
+    log('bgRed', `Removing listeners and deleting from map...`);
     port.removeAllListeners();
     portPathSerialMap.delete(port.path);
-    log('bgRed', `SerialPort ${port.path} disconnect setup listener.`);
+    socket.emit('PORT_DISCONNECT', {portPath: port.path, message});
   });
   return {port, parser};
 }
+
 export function scanNewMicros(dispatchAndEmit: (action: AllActions, destination: string) => void): () => void {
   return function scan(): void {
     scanSerial().then((portInfoArr) => {
@@ -74,7 +95,7 @@ export function scanNewMicros(dispatchAndEmit: (action: AllActions, destination:
         return !portPathSerialMap.has(portInfo.path);
       });
       const newSerialConnections = uninitialized.map((portInfo) => {
-        return new MicroController(initSerialPort(portInfo), dispatchAndEmit);
+        return new MicroController(initSerialPort(portInfo), dispatchAndEmit, getMicroSocketInstance());
       });
 
       Promise.all(newSerialConnections.map(micro => micro.initialize()))
@@ -83,18 +104,23 @@ export function scanNewMicros(dispatchAndEmit: (action: AllActions, destination:
           const { microId } = micro;
           addMicroChannel(microId);
           microIdSerialMap.set(microId, micro);
+          
+          micro.serial.port.on('close', () => {
+            log('bgRed', `Connection to microcontroller ${microId} closed. Removing microcontroller instance...`);
+            microIdSerialMap.delete(microId);
+          });
           micro.serial.port.on('disconnect', () => {
             dispatchAndEmit(
               removeMicros({microIds: [microId]}),
               SocketDestination.WEB_CLIENTS
             );
-            microIdSerialMap.delete(microId);
+            
             log('bgRed', `SerialPort ${microId} disconnect microInit listener.`);
           });
         });
       })
       .catch((reason) => {
-        log('bgRed', `Error adding new serial connection: ${reason}`)
+        log('bgRed', `Error adding new serial connection: ${reason}`);
       });
     })
     // .catch((reason) => {

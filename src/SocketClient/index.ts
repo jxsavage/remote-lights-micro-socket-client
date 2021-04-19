@@ -8,11 +8,11 @@ import {
   SharedEmitEvent, SocketSource, SocketDestination
 } from '../Shared/socket';
 import { createStore, applyMiddleware } from 'redux';
-import initSocket, { emitAnyAction, socket } from './socket';
+import getSocket, { emitAnyAction } from './socket';
 import { scanNewMicros, microIdSerialMap } from './serial';
 
-export default function initClient(): void {
-  initSocket();
+const socket = getSocket();
+export default function initClient(clientId: number): void {
   const {LIGHT_CLIENT} = SocketSource;
   const [andEmit, emitMiddlware] = emitActionMiddleware<RootState>(emitAnyAction, LIGHT_CLIENT);
   const middleware = applyMiddleware(
