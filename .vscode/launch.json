@@ -19,7 +19,7 @@
       "type": "node",
       "request": "attach",
       "name": "Local: Attach to Server",
-      "port": 9229,
+      "port": 5858,
       "restart": true,
       "protocol": "inspector"
     }
