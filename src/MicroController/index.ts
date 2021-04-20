@@ -7,7 +7,7 @@ import { SocketDestination } from '../Shared/socket';
 import { SerialWithParser } from '../SocketClient/serial';
 import log from '../Shared/logger';
 import { generateId, convertMicroResponseToMicroEntity, } from '../Shared/store/utils';
-import { MicroActionType, MicroEntityTypes } from '../Shared/store/actions';
+import { MicroActionType, MicroEntityActionType } from '../Shared/store/actions';
 
 const {
   GET_STATE, RESIZE_SEGMENTS_FROM_BOUNDARIES,
@@ -107,7 +107,7 @@ export class MicroController implements MicroActionsInterface {
       //     convertMicroResponseToMicroEntity(microState)
       // ), SocketDestination.WEB_CLIENTS);
       this.microId = microState[1];
-      this.socket.emit(MicroEntityTypes.ADD_MICROS, convertMicroResponseToMicroEntity(microState));
+      this.socket.emit(MicroEntityActionType.ADD_MICROS, convertMicroResponseToMicroEntity(microState));
     }
     const handleResponse = (response: MicroResponse): void => {
       const responseType = response[0];
