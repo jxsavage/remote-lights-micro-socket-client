@@ -1,13 +1,11 @@
-import { 
-  AllActions, MicroActionsInterface, MicroState,
-  addMicros, MICRO_COMMAND,
-} from '../Shared/store'
-import { MicroStateResponse } from '../Shared/store/types';
-import { SocketDestination } from '../Shared/socket';
-import { SerialWithParser } from '../SocketClient/serial';
-import log from '../Shared/logger';
-import { generateId, convertMicroResponseToMicroEntity, } from '../Shared/store/utils';
-import { MicroActionType, MicroEntityActionType } from '../Shared/store/actions';
+import {
+  MicroStateResponse, generateId,
+  convertMicroResponseToMicroEntity,
+  MicroActionType, MicroEntityActionType,
+  MicroActionsInterface, MicroState, MICRO_COMMAND,
+} from 'Shared/store';
+import { SerialWithParser } from 'SocketClient/serial';
+import log from 'Shared/logger';
 
 const {
   GET_STATE, RESIZE_SEGMENTS_FROM_BOUNDARIES,
@@ -24,19 +22,16 @@ export class MicroController implements MicroActionsInterface {
   microId!: MicroState['microId'];
   serial: SerialWithParser;
   socket: SocketIOClient.Socket;
-  dispatch: (action: AllActions, destination: string) => void;
   initialized: boolean;
   static cmdGetInfo = `${JSON.stringify([MICRO_COMMAND.GET_STATE])}\n`;
   
   constructor(
     serialPort: SerialWithParser,
-    dispatch: (action: AllActions, destination: string) => void,
     socket: SocketIOClient.Socket
   ){
     this.initialized = false;
     this.serial = serialPort;
     this.socket = socket;
-    this.dispatch = dispatch;
 
     
     const { serial: { parser }, dataHandler } = this;
@@ -102,10 +97,6 @@ export class MicroController implements MicroActionsInterface {
           return segment;
         })
       }
-      // this.dispatch(
-      //   addMicros(
-      //     convertMicroResponseToMicroEntity(microState)
-      // ), SocketDestination.WEB_CLIENTS);
       this.microId = microState[1];
       this.socket.emit(MicroEntityActionType.ADD_MICROS, convertMicroResponseToMicroEntity(microState));
     }
@@ -147,8 +138,7 @@ export class MicroController implements MicroActionsInterface {
     }
   }
   initialize = (): Promise<MicroController> => {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       const initMsg = setInterval(() => console.log('Waiting for initialization...'), 3000);
       const initializing = setInterval((resolve) => {
         if(this.microId) {

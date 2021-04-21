@@ -1,14 +1,11 @@
 import SerialPort, { parsers } from 'serialport';
-import MicroController from '../MicroController';
-import {
-  MicroState, removeMicros, AllActions,
-} from '../Shared/store';
-import { SocketDestination } from '../Shared/socket';
-import getSocket, { addMicroChannel, getMicroSocketInstance } from './socket';
-import log from '../Shared/logger';
+import MicroController from 'MicroController';
+import { MicroState } from 'Shared/store';
+import getSocket, {
+  addMicroChannel, getMicroSocketInstance,
+} from './socket';
+import log from 'Shared/logger';
 import {readdir} from 'fs';
-
-
 
 /**
  * Scans for serials based on path.
@@ -22,21 +19,15 @@ export function scanSerial(): Promise<SerialPort.PortInfo[]> {
         log('bgRed', err.message)
         reject(err)
       }
-        
+
       const teensy = /teensy[0-9]+/
       const connectedMicros = files.reduce((prev, path) => {
         if(teensy.test(path))
-          prev.push({path:`/dev/${path}`})
-        return prev
+          prev.push({path:`/dev/${path}`});
+        return prev;
       }, [] as SerialPort.PortInfo[])
-      resolve(connectedMicros as SerialPort.PortInfo[])
-    })
-    // list().then((serialPortList) => {
-    //   const connectedMicros = serialPortList.filter((portInfo) => {
-    //     return portInfo.productId === '0483';
-    //   });
-    //   resolve(connectedMicros);
-    // });
+      resolve(connectedMicros as SerialPort.PortInfo[]);
+    });
   });
 }
 const {Readline} = parsers;
@@ -59,11 +50,10 @@ const socket = getSocket();
  * @param portInfo known microcontroller port
  * @returns Serial port connection with parser attached.
  */
-export function initSerialPort(portInfo: SerialPort.PortInfo): SerialWithParser {
+function initSerialPort(portInfo: SerialPort.PortInfo): SerialWithParser {
   const {path} = portInfo;
   log('bgGreen', `Connecting to microcontroller on port ${path}`);
   const parser = new Readline({delimiter:'\n', encoding: 'utf8'});
-
   const openOptions = {
     autoOpen: true,
     baudRate: 115200,
@@ -88,43 +78,36 @@ export function initSerialPort(portInfo: SerialPort.PortInfo): SerialWithParser 
   return {port, parser};
 }
 
-export function scanNewMicros(dispatchAndEmit: (action: AllActions, destination: string) => void): () => void {
-  return function scan(): void {
-    scanSerial().then((portInfoArr) => {
-      const uninitialized = portInfoArr.filter((portInfo)=>{
-        return !portPathSerialMap.has(portInfo.path);
-      });
-      const newSerialConnections = uninitialized.map((portInfo) => {
-        return new MicroController(initSerialPort(portInfo), dispatchAndEmit, getMicroSocketInstance());
-      });
+async function scanNewMicros(): Promise<MicroController[]> {
+  const portInfoArray = await scanSerial();
 
-      Promise.all(newSerialConnections.map(micro => micro.initialize()))
-      .then((microArr: MicroController[])=>{
-        microArr.forEach((micro) => {
-          const { microId } = micro;
-          addMicroChannel(microId);
-          microIdSerialMap.set(microId, micro);
-          
-          micro.serial.port.on('close', () => {
-            log('bgRed', `Connection to microcontroller ${microId} closed. Removing microcontroller instance...`);
-            microIdSerialMap.delete(microId);
-          });
-          micro.serial.port.on('disconnect', () => {
-            dispatchAndEmit(
-              removeMicros({microIds: [microId]}),
-              SocketDestination.WEB_CLIENTS
-            );
-            
-            log('bgRed', `SerialPort ${microId} disconnect microInit listener.`);
-          });
-        });
-      })
-      .catch((reason) => {
-        log('bgRed', `Error adding new serial connection: ${reason}`);
-      });
-    })
-    // .catch((reason) => {
-    //   log('bgRed', `Error scanning new serial connections: ${reason}`)
-    // });
-  }
+  const initializingMicros = portInfoArray.reduce((micros, currentPort) => {
+    if(!portPathSerialMap.has(currentPort.path)) {
+      micros.push(
+        new MicroController(initSerialPort(currentPort), getMicroSocketInstance()).initialize()
+        );
+    }
+    return micros;
+  }, [] as Promise<MicroController>[]);
+
+  const newMicros = await Promise.all(initializingMicros);
+
+  newMicros.forEach((micro) => {
+    const { microId } = micro;
+    addMicroChannel(microId);
+    microIdSerialMap.set(microId, micro);
+
+    micro.serial.port.on('close', () => {
+      log('bgRed', `Connection to microcontroller ${microId} closed. Removing microcontroller instance...`);
+      microIdSerialMap.delete(microId);
+    });
+  });
+  return newMicros;
 }
+
+export function scan(): void {
+  scanNewMicros().catch((reason) => {
+    log('bgRed', `Error adding new serial connection: ${reason}`);
+  })
+}
+
