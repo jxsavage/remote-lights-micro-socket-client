@@ -1,7 +1,7 @@
 import { connect } from 'socket.io-client';
 import { ClientEmitEvent } from 'Shared/socket';
-import { MicroState } from 'Shared/store';
 import * as dotenv from 'dotenv';
+import { getClientId } from './util';
 
 dotenv.config();
 
@@ -13,7 +13,6 @@ interface ClientEnv {
 const {
   REACT_APP_SOCKET_IP,
   REACT_APP_SOCKET_PORT,
-  CLIENT_ID
 } = process.env as unknown as ClientEnv;
 
 let socketInstance: SocketIOClient.Socket | undefined;
@@ -38,13 +37,11 @@ const getMicroSocketInstance = (): SocketIOClient.Socket => {
 }
 
 const socket = getSocket();
-const {INIT_LIGHT_CLIENT, ADD_MICRO_CHANNEL} = ClientEmitEvent;
+const { INIT_LIGHT_CLIENT } = ClientEmitEvent;
 socket.on('connect', () => {
-  socket.emit(INIT_LIGHT_CLIENT, CLIENT_ID);
+  socket.emit(INIT_LIGHT_CLIENT, getClientId());
 });
-export function addMicroChannel(microId: MicroState['microId']): void {
-  socket.emit(ADD_MICRO_CHANNEL, String(microId));
-}
+
 export default getSocket;
 export {
   getMicroSocketInstance

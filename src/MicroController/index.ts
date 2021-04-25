@@ -1,16 +1,21 @@
 import {
-  MicroStateResponse, generateId,
+  generateId,
   convertMicroResponseToMicroEntity,
-  MicroActionType, MicroEntityActionType,
-  MicroActionsInterface, MicroState, MICRO_COMMAND,
+  MicroEntityActionType, MicroActionsInterface,
 } from 'Shared/store';
+import {
+  MicroStateResponse, MicroActionType,
+  MicroId, SegmentId, REVERSE_MICRO_COMMAND,
+  MicroState, MICRO_COMMAND,
+} from 'Shared/types'
 import { SerialWithParser } from 'SocketClient/serial';
 import log from 'Shared/logger';
+import { SharedEmitEvent } from 'Shared/socket';
 
 const {
   GET_STATE, RESIZE_SEGMENTS_FROM_BOUNDARIES,
   SET_SEGMENT_EFFECT, SPLIT_SEGMENT, MERGE_SEGMENTS, SET_MICRO_BRIGHTNESS,
-  SET_MICRO_ID, SET_SEGMENT_ID,
+  SET_MICRO_ID, SET_SEGMENT_ID, WRITE_EEPROM, RESET_MICRO_STATE
 } = MICRO_COMMAND;
 enum MicroMessage {
   ERROR = 130, WARNING, INFO, DEBUG, PING, PONG, COMMAND_SUCCESS, COMMAND_FAILURE
@@ -23,8 +28,10 @@ export class MicroController implements MicroActionsInterface {
   serial: SerialWithParser;
   socket: SocketIOClient.Socket;
   initialized: boolean;
-  static cmdGetInfo = `${JSON.stringify([MICRO_COMMAND.GET_STATE])}\n`;
-  
+  static WRITE_EEPROM_COMMAND = [WRITE_EEPROM];
+  static RESET_MICRO_STATE_COMMAND = [RESET_MICRO_STATE];
+  static GET_STATE_COMMAND = [MICRO_COMMAND.GET_STATE];
+
   constructor(
     serialPort: SerialWithParser,
     socket: SocketIOClient.Socket
@@ -38,45 +45,67 @@ export class MicroController implements MicroActionsInterface {
     parser.on('data', dataHandler);
     
   }
+  writeSerial = (command: number[]): void => {
+    log('infoHeader', `Executing command ${REVERSE_MICRO_COMMAND[command[0]-1]}`);
+    const commandString = JSON.stringify(command);
+    log('info', `Arguments: ${commandString}`);
+    this.serial.port.write(`${commandString}\n`);
+    this.serial.port.drain();
+  }
+  writeEEPROM = (): void => {
+    log('info', `Writing EEPROM to Microcontroller ${this.microId}`);
+    this.writeSerial(MicroController.WRITE_EEPROM_COMMAND);
+  }
+  reset = (): void => {
+    log('info', `Resetting Microcontroller ${this.microId}...`);
+    this.writeSerial(MicroController.RESET_MICRO_STATE_COMMAND);
+  }
+  getMicroState = (): void => {
+    this.writeSerial(MicroController.GET_STATE_COMMAND);
+  }
   splitSegment:
   MicroActionsInterface['splitSegment'] = (
     { newEffect, direction, segmentId, newSegmentId }
   ) => {
-    const command = JSON.stringify([SPLIT_SEGMENT, newEffect,  direction, segmentId, newSegmentId]);
-    this.serial.port.write(`${command}\n`);
-    this.serial.port.drain();
+    const command = [SPLIT_SEGMENT, newEffect,  direction, segmentId, newSegmentId];
+    this.writeSerial(command);
   }
   mergeSegments:
   MicroActionsInterface['mergeSegments'] = (
     { direction, segmentId }
   ) => {
-    const command = JSON.stringify([MERGE_SEGMENTS, direction, segmentId]);
-    this.serial.port.write(`${command}\n`);
-    this.serial.port.drain();
+    const command = [MERGE_SEGMENTS, direction, segmentId];
+    this.writeSerial(command);
   }
   resizeSegmentsFromBoundaries:
   MicroActionsInterface['resizeSegmentsFromBoundaries'] = (
     { segmentBoundaries }
   ) => {
-    const command = JSON.stringify([RESIZE_SEGMENTS_FROM_BOUNDARIES, segmentBoundaries]);
-    this.serial.port.write(`${command}\n`);
-    this.serial.port.drain();
+    const command = [RESIZE_SEGMENTS_FROM_BOUNDARIES, segmentBoundaries];
+    this.writeSerial(command as number[]);
   }
   setMicroBrightness:
   MicroActionsInterface['setMicroBrightness'] = (
     { brightness }
   ) => {
-    const command = JSON.stringify([SET_MICRO_BRIGHTNESS, brightness]);
-    this.serial.port.write(`${command}\n`);
-    this.serial.port.drain();
+    const command = [SET_MICRO_BRIGHTNESS, brightness];
+    this.writeSerial(command);
   }
   setSegmentEffect:
   MicroActionsInterface['setSegmentEffect'] = (
     { newEffect, segmentId }
   ) => {
-    const command = JSON.stringify([SET_SEGMENT_EFFECT, newEffect, segmentId]);
-    this.serial.port.write(`${command}\n`);
-    this.serial.port.drain();
+    const command = [SET_SEGMENT_EFFECT, newEffect, segmentId];
+    this.writeSerial(command);
+  }
+  setMicroId = (microId: MicroId): void => {
+    log('info', `Setting microId to ${microId}`);
+    const command = [SET_MICRO_ID, microId];
+    this.writeSerial(command);
+  }
+  setSegmentId = (oldId: SegmentId, newId: SegmentId): void => {
+    const command = [SET_SEGMENT_ID, oldId, newId];
+    this.writeSerial(command);
   }
   dataHandler = (data: string): void => {
     const handleInfo = (microStateResponse: MicroStateResponse): void => {
@@ -84,18 +113,16 @@ export class MicroController implements MicroActionsInterface {
       const microState = microStateResponse;
       if(microId === 0) {
         const newMicroId = generateId();
+        log('bgRed', `microcontroller had an id of 0, re-initializing to ${newMicroId}`);
         microState[1] = newMicroId;
-        const setMicroIdCommand = JSON.stringify([SET_MICRO_ID, newMicroId]);
-        this.serial.port.write(`${setMicroIdCommand}\n`);
+        this.setMicroId(newMicroId);
         const [,,,,segmentsResponse] = microState;
         microState[4] = segmentsResponse.map((segment) => {
-          const oldId = segment[3];
           const newId = generateId();
+          this.setSegmentId(segment[3], newId);
           segment[3] = newId;
-          const setSegmentIdCommand = JSON.stringify([SET_SEGMENT_ID, oldId, newId]);
-          this.serial.port.write(`${setSegmentIdCommand}\n`);
           return segment;
-        })
+        });
       }
       this.microId = microState[1];
       this.socket.emit(MicroEntityActionType.ADD_MICROS, convertMicroResponseToMicroEntity(microState));
@@ -149,18 +176,18 @@ export class MicroController implements MicroActionsInterface {
           clearInterval(initMsg);
           const { socket, microId } = this;
           socket.emit('INIT_MICRO', microId);
+          socket.on(MicroActionType.RESET_MICRO_STATE, this.reset);
+          socket.on(MicroActionType.WRITE_EEPROM, this.writeEEPROM);
           socket.on(MicroActionType.SPLIT_SEGMENT, this.splitSegment);
           socket.on(MicroActionType.MERGE_SEGMENTS, this.mergeSegments);
+          socket.on(SharedEmitEvent.RE_INIT_APP_STATE, this.getMicroState);
           socket.on(MicroActionType.SET_SEGMENT_EFFECT, this.setSegmentEffect);
           socket.on(MicroActionType.SET_MICRO_BRIGHTNESS, this.setMicroBrightness);
           socket.on(MicroActionType.RESIZE_SEGMENTS_FROM_BOUNDARIES, this.resizeSegmentsFromBoundaries);
         }
       }, 100, resolve);
-
-      this.serial.port.write(MicroController.cmdGetInfo);
-      this.serial.port.drain();
+      this.getMicroState();
     });
   }
 }
-
 export default MicroController;

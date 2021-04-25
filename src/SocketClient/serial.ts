@@ -1,8 +1,8 @@
 import SerialPort, { parsers } from 'serialport';
 import MicroController from 'MicroController';
-import { MicroState } from 'Shared/store';
+import { MicroState } from 'Shared/types';
 import getSocket, {
-  addMicroChannel, getMicroSocketInstance,
+  getMicroSocketInstance,
 } from './socket';
 import log from 'Shared/logger';
 import {readdir} from 'fs';
@@ -94,7 +94,6 @@ async function scanNewMicros(): Promise<MicroController[]> {
 
   newMicros.forEach((micro) => {
     const { microId } = micro;
-    addMicroChannel(microId);
     microIdSerialMap.set(microId, micro);
 
     micro.serial.port.on('close', () => {
