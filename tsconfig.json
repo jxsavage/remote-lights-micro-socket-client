@@ -21,5 +21,10 @@
   },
   "include": [
     "src/**/*"
-  ]
+  ],
+  "resolveSourceMapLocations": [
+    "${workspaceFolder}/**",
+    "!**/node_modules/typescript/**",
+    "!**/node_modules/ts-node/**"
+  ],
 }

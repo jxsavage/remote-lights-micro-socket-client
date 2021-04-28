@@ -6,13 +6,13 @@
   "types": "src",
   "type": "commonjs",
   "scripts": {
-    "start:dev": "node --inspect-brk=0.0.0.0:5858 -r ts-node/register -r tsconfig-paths/register src/index.ts --inspect=0.0.0.0:5858",
+    "start:dev": "node --inspect=6868 -r ts-node/register -r tsconfig-paths/register src/index.ts --inspect=0.0.0.0:5858",
     "dev": "nodemon --config nodemon.json",
     "build": "tsc",
     "start": "nodemon --config nodemon.prod.json",
     "start:prod": "node dist/index.js",
     "test": "jest",
-    "test:watch": "jest --watchAll",
+    "test:watch": "node --inspect=6969 ./node_modules/jest/bin/jest.js --watchAll",
     "find-node": "ps -aef | grep ts-node"
   },
   "author": "",
