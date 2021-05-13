@@ -1,5 +1,5 @@
-import SerialPort, { parsers } from 'serialport';
-import MicroController from 'MicroController';
+import SerialPort, { parsers, list } from 'serialport';
+import Microcontroller from 'Microcontroller';
 import { MicroState } from 'Shared/types';
 import getSocket, {
   getMicroSocketInstance,
@@ -7,12 +7,25 @@ import getSocket, {
 import log from 'Shared/logger';
 import {readdir} from 'fs';
 
+// bluez.on('device', async (address, props) => {
+//   log('bgGreen', ` [NEW] Device: ${address} ${props.Name}`);
+//   const dev = await bluez.getDevice(address);
+// });
+// bluez.init().then(async () => {
+//   // listen on first bluetooth adapter
+//   const adapter = await bluez.getAdapter();
+//   await adapter.StartDiscovery();
+//   log('bgGreen', ' Discovering BT Devices... ');
+// }).catch(console.error);
+
 /**
  * Scans for serials based on path.
  * Looks for /dev/teensy[0-9]+
  * @returns Array of PortInfo about valid microcontrollers.
  */
-export function scanSerial(): Promise<SerialPort.PortInfo[]> {
+export  async function scanSerial(): Promise<SerialPort.PortInfo[]> {
+  const serialList = await list();
+  const paths = serialList.map((port) => port.path);
   return new Promise((resolve, reject) => {
     readdir('/dev', (err, files) => {
       if(err) {
@@ -21,10 +34,11 @@ export function scanSerial(): Promise<SerialPort.PortInfo[]> {
       }
 
       const teensy = /teensy[0-9]+/
-      const connectedMicros = files.reduce((prev, path) => {
-        if(teensy.test(path))
-          prev.push({path:`/dev/${path}`});
-        return prev;
+      const bluetooth = /rfcomm[0-9]+/
+      const connectedMicros = files.reduce((pathList, path) => {
+        if(teensy.test(path) || bluetooth.test(path))
+          pathList.push({path:`/dev/${path}`});
+        return pathList;
       }, [] as SerialPort.PortInfo[])
       resolve(connectedMicros as SerialPort.PortInfo[]);
     });
@@ -36,7 +50,7 @@ interface SerialPortDisconnectReason {
   message: string;
   stack: string;
 }
-export const microIdSerialMap = new Map<MicroState['microId'], MicroController>();
+export const microIdSerialMap = new Map<MicroState['microId'], Microcontroller>();
 type portPath = string;
 export type SerialWithParser = {
   port: SerialPort;
@@ -78,17 +92,17 @@ function initSerialPort(portInfo: SerialPort.PortInfo): SerialWithParser {
   return {port, parser};
 }
 
-async function scanNewMicros(): Promise<MicroController[]> {
+async function scanNewMicros(): Promise<Microcontroller[]> {
   const portInfoArray = await scanSerial();
 
   const initializingMicros = portInfoArray.reduce((micros, currentPort) => {
     if(!portPathSerialMap.has(currentPort.path)) {
       micros.push(
-        new MicroController(initSerialPort(currentPort), getMicroSocketInstance()).initialize()
+        new Microcontroller(initSerialPort(currentPort), getMicroSocketInstance()).initialize()
         );
     }
     return micros;
-  }, [] as Promise<MicroController>[]);
+  }, [] as Promise<Microcontroller>[]);
 
   const newMicros = await Promise.all(initializingMicros);
 

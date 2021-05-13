@@ -1,5 +1,6 @@
-import initClient from './SocketClient';
-import log from './Shared/logger';
+import SocketClient from 'SocketClient';
+import log from 'Shared/logger';
+import 'SocketClient/bluetooth'
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 require('dotenv').config();
 interface LaunchEnv {
@@ -13,4 +14,4 @@ const {
 
 
 log('infoHeader', `Launching Pi in client only mode, looking for server @${REACT_APP_SOCKET_IP}:${REACT_APP_SOCKET_PORT}`)
-initClient();
+const client = new SocketClient();

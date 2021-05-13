@@ -10,7 +10,10 @@
       "name": "Client",
       "port": 6868,
       "restart": true,
-      "protocol": "inspector"
+      "protocol": "inspector",
+      "skipFiles": [
+        "src/Shared/logger/**"
+      ]
     },
     {
       "type": "node",
