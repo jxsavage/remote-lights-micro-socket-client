@@ -6,13 +6,13 @@
   "types": "src",
   "type": "commonjs",
   "scripts": {
-    "start:dev": "node --inspect=6868 -r ts-node/register -r tsconfig-paths/register src/index.ts --inspect=0.0.0.0:5858",
+    "start:dev": "node --inspect=6868 --trace-warnings --max-old-space-size=1024 -r ts-node/register -r tsconfig-paths/register src/index.ts",
     "dev": "nodemon --config nodemon.json",
     "build": "tsc",
     "start": "nodemon --config nodemon.prod.json",
-    "start:prod": "node dist/index.js",
+    "start:prod": "node --max-old-space-size=1024 dist/index.js",
     "test": "jest",
-    "test:watch": "node --inspect=6969 ./node_modules/jest/bin/jest.js --watchAll",
+    "test:watch": "node --inspect=6969 --trace-warnings ./node_modules/jest/bin/jest.js --watchAll",
     "find-node": "ps -aef | grep ts-node"
   },
   "author": "",
@@ -33,7 +33,7 @@
     "typescript": "^4.2.4"
   },
   "dependencies": {
-    "bluez": "^0.4.3",
+    "bluez": "^0.4.4",
     "chalk": "^4.1.0",
     "deep-object-diff": "^1.1.0",
     "dotenv": "^8.2.0",

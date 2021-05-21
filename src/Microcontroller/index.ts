@@ -1,13 +1,15 @@
 import {
-  generateId,
-  convertMicroResponseToMicroEntity,
+  generateId, convertMicroResponseToMicroEntity,
   MicroEntityActionType, MicroActionsInterface,
 } from 'Shared/store';
 import {
-  MicroStateResponse, MicroActionType,
   MicroId, SegmentId, MicroState,
+  MicroStateResponse, MicroActionType,
 } from 'Shared/types';
-import { MICRO_COMMAND, REVERSE_MICRO_COMMAND, MicroResponseHeader, MicroResponseCode, SerialCommand, CommandArray, MicroCommand} from 'Shared/types/micro';
+import {
+  REVERSE_MICRO_COMMAND, MicroResponseHeader,
+  MicroResponseCode, CommandArray, MicroCommand,
+} from 'Shared/types/micro';
 import { SerialWithParser } from 'SocketClient/serial';
 import log from 'Shared/logger';
 import { SharedEmitEvent } from 'Shared/socket';
@@ -22,6 +24,8 @@ export class Microcontroller implements MicroActionsInterface {
   commandQueue: CommandQueue;
   socket: SocketIOClient.Socket;
   microId!: MicroState['microId'];
+  writeSerialInterval: NodeJS.Timeout;
+  initMsgInterval: NodeJS.Timeout | undefined;
   constructor(
     serialPort: SerialWithParser,
     socket: SocketIOClient.Socket,
@@ -30,13 +34,23 @@ export class Microcontroller implements MicroActionsInterface {
     this.serial = serialPort;
     this.initialized = false;
     this.commandQueue = new CommandQueue();
-    const { serial: { parser }, dataHandler } = this;
-    parser.on('data', dataHandler);
+    this.serial.parser.on('data', this.dataHandler);
+    this.writeSerialInterval = setInterval(() => {
+      const command = this.commandQueue.next();
+      if(command) {
+        this.writeSerial(command.get());
+      }
+    }, 1);
   }
   writeSerial = (command: string): void => {
     log('info', `Writing Command to Serial: ${command}`);
-    this.serial.port.write(`${command}\n`);
-    this.serial.port.drain();
+    try {
+      this.serial.port.write(`${command}\n`);
+    } catch(err) {
+      log('textRed', `[ ${this.serial.port.path} ] Error writing to port.`);
+    }
+    
+    // this.serial.port.drain();
   }
   queueCommand = (command: CommandArray, cbs?: fn[]): void => {
     log('infoHeader', `Queueing command ${REVERSE_MICRO_COMMAND[command[0]-1]}`);
@@ -99,6 +113,7 @@ export class Microcontroller implements MicroActionsInterface {
     const entity = convertMicroResponseToMicroEntity(microStateResponse);
     const {micros, segments} = entity;
     const microId = micros.allIds[0];
+    log('textGreen', `[ ${microId} ] State received`)
     const micro = micros.byId[microId];
     if(microId === 0) {
       const newMicroId = generateId();
@@ -132,22 +147,37 @@ export class Microcontroller implements MicroActionsInterface {
     }
   }
   private init = () => this.initialized = true;
+  clean = (): void => {
+    if (this.serial.port.isOpen) this.serial.port.close();
+    clearInterval(this.writeSerialInterval);
+    if(this.initMsgInterval) clearInterval(this.initMsgInterval);
+    this.serial.port.removeAllListeners();
+    this.socket.removeAllListeners();
+    this.socket.close();
+  }
   initialize = (): Promise<Microcontroller> => {
-    return new Promise((resolve) => {
-      setInterval(() => {
-        const command = this.commandQueue.next();
-        if(command) {
-          this.writeSerial(command.get());
-        }
-      }, 1);
-      const initMsg = setInterval(() => log('textGreen','Waiting for initialization...'), 3000);
+    return new Promise((resolve, reject) => {
+      const msPerTick = 1000;
+      const ticksToWait = 10;
+      let currentTick = 0;
+      this.initMsgInterval = setInterval(() => {
+        log('textGreen',`[ ${this.serial.port.path} ] waiting for initialization (${currentTick})`);
+        if(currentTick>=ticksToWait) {
+          if(this.initMsgInterval) clearInterval(this.initMsgInterval);
+          this.clean();
+          if (this.serial.port.isOpen) this.serial.port.close();
+          
+          reject(`Timeout waiting for Micro at ${this.serial.port.path}`);
+        } 
+        currentTick++;
+      }, msPerTick);
       const initializing = setInterval((resolve) => {
         if(this.microId) {
-          log('info', `Microconroller ${this.microId} initialized.`)
+          log('info', ` Microconroller: ${this.microId} - ${this.serial.port.path} initialized. `);
           this.initialized = true;
           resolve(this);
           clearInterval(initializing);
-          clearInterval(initMsg);
+          if(this.initMsgInterval) clearInterval(this.initMsgInterval);
           const { socket, microId } = this;
           socket.emit('INIT_MICRO', microId);
           socket.on(MicroActionType.RESET_MICRO, this.reset);
