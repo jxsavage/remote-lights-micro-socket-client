@@ -2,20 +2,17 @@ import {  scanSerial, initSerialPort, SerialWithParser } from './serial';
 import { getClientId } from './util';
 import { ClientEmitEvent } from 'Shared/socket'
 import getSocket, { getMicroSocketInstance } from './socket';
-import initBluez, {
-  getRfcommDetails, spawnRfcomm, getVisibleDevices,
-  releaseRfcomm,
-} from './bluetooth';
+import Bluetooth from './bluetooth';
 import log from 'Shared/logger';
 import {
   AllBTInfoPayload, DevicePropsPayload, RfcommPayload,
 } from 'Shared/types/client';
 import Microcontroller from 'Microcontroller';
-import { MicroCommand } from 'Shared/types/micro';
 
 const socket = getSocket();
 export default class SocketClient {
   private id: number;
+  private bluetooth!: Bluetooth;
   private scanPort: NodeJS.Timeout;
   private portsInUse: Set<string>;
   private microMap: Map<Microcontroller, Microcontroller>;
@@ -25,6 +22,7 @@ export default class SocketClient {
     this.portsInUse = new Set<string>();
     if (disableBT === 'false') {
       log('textGreen', 'Bluetooth enabled.');
+      this.bluetooth = new Bluetooth();
       this.initBluez();
       this.getRfcommDetails();
     } else {
@@ -99,7 +97,7 @@ export default class SocketClient {
     });
   }
   private getRfcommDetails = async (): Promise<void> => {
-    const details = await getRfcommDetails();
+    const details = await this.bluetooth.getRfcommDetails();
     const payload: RfcommPayload = {
       clientId: this.id,
       rfcomms: details,
@@ -107,7 +105,7 @@ export default class SocketClient {
     socket.emit(ClientEmitEvent.BT_CONNECTED_DEVS, payload);
   }
   private getVisibleDevices = async (): Promise<void> => {
-    const devices = await getVisibleDevices();
+    const devices = await this.bluetooth.getVisibleDevices();
     const payload: DevicePropsPayload = {
       clientId: this.id,
       devices,
@@ -115,7 +113,7 @@ export default class SocketClient {
     socket.emit(ClientEmitEvent.BT_VISIBLE_DEVS, payload);
   }
   private getAllBTInfo = async (): Promise<void> => {
-    const [rfcomms, devices] = await Promise.all([getRfcommDetails(), getVisibleDevices()]);
+    const [rfcomms, devices] = await Promise.all([this.bluetooth.getRfcommDetails(), this.bluetooth.getVisibleDevices()]);
     const payload: AllBTInfoPayload = {
       clientId: this.id,
       rfcomms,
@@ -124,13 +122,13 @@ export default class SocketClient {
     socket.emit(ClientEmitEvent.BT_ALL_DEV_INFO, payload);
   }
   private createRfcomm = (address: string) => {
-    spawnRfcomm(address);
+    this.bluetooth.spawnRfcomm(address);
   }
   private releaseRfcomm = (device: number) => {
-    releaseRfcomm(device);
+    this.bluetooth.releaseRfcomm(device);
   }
   private initBluez = (): void => {
-    initBluez();
+    this.bluetooth.initialize();
   }
   private initSerial = (): NodeJS.Timeout => {
     if(this.scanPort) clearInterval(this.scanPort);

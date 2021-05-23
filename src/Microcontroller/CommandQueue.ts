@@ -1,8 +1,8 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import log from "Shared/logger";
 import { CommandArray, MicroResponseHeader } from "Shared/types/micro";
 
 type fn = () => void;
-type stateCBFn<S> = (arg: S) => void;
 type stateAndCmdCBFn<S, C> = (state: S, command: C) => void; 
 type commandCallbacks<S, C> = fn | stateAndCmdCBFn<S, C>;
 type TransformFn<Response, State> = (response: Response) => State

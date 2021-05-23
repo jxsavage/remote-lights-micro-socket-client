@@ -1,6 +1,6 @@
 import {
   generateId, convertMicroResponseToMicroEntity,
-  MicroEntityActionType, MicroActionsInterface,
+  MicroEntityActionType, MicroActionsInterface, createSegment,
 } from 'Shared/store';
 import {
   MicroId, SegmentId, MicroState,
@@ -17,6 +17,7 @@ import CommandQueue, { Command } from './CommandQueue';
 import CMD from './Command';
 import microTester from './microTester';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type fn = (a: any) => void;
 export class Microcontroller implements MicroActionsInterface {
   initialized: boolean;
@@ -117,16 +118,36 @@ export class Microcontroller implements MicroActionsInterface {
     const micro = micros.byId[microId];
     if(microId === 0) {
       const newMicroId = generateId();
+      micros.allIds[0] = newMicroId;
       this.microId = newMicroId;
       log('bgRed', `microcontroller had an id of 0, re-initializing to ${newMicroId}`);
       micro.microId = newMicroId;
       this.setMicroId(newMicroId);
-      micro.segmentIds.forEach((segmentId) => {
+      const oldSegmentIds = micro.segmentIds.map(id => id);
+      const newSegmentIds = oldSegmentIds.map((segId) => {
         const newId = generateId();
-        this.setSegmentId(segmentId, newId);
+        this.setSegmentId(segId, newId);
         segments.allIds.push(newId);
         segments.allIds.shift();
+        const {effect, effectControlledBy, numLEDs, offset} = segments.byId[segId];
+        const newSegment = createSegment(
+          newMicroId, offset, numLEDs,
+          effect, newId, effectControlledBy);
+        delete segments.byId[segId];
+        segments.byId[newId] = newSegment;
+        return newId;
       });
+      const {brightness, segmentBoundaries, totalLEDs} = micros.byId[0];
+      const newMicro = {
+        totalLEDs,
+        brightness,
+        segmentBoundaries,
+        microId: newMicroId,
+        segmentIds: newSegmentIds,
+
+      }
+      delete micros.byId[0];
+      micros.byId[newMicroId] = newMicro;
     } else {
       this.microId = microId;
     }
