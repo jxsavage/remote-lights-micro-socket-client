@@ -126,36 +126,40 @@ export default class Bluetooth {
       const bluezInstance = await this.getBluez();
       log('textGreen', ` Detected device: ${address} - ${props.Name}`);
       // Get the device interface
-      const device = await bluezInstance.getDevice(address);
-      device.on('PropertiesChanged', (props) => {
-        log('bgGreen', ` [ ${address} ] Properties changed. `);
-        Object.entries(props).forEach((key, val) => {
-          log('textGreen', `${key} : ${val}`);
-        })
-        const paired: boolean | undefined = props?.Paired;
-        const connected: boolean | undefined = props?.Connected;
-        if(paired != undefined || connected != undefined) {
-          log('textGreen', `[ ${address} ] Connection status changed.`);
+      try {
+        const device = await bluezInstance.getDevice(address);
+        // device.on('PropertiesChanged', (props) => {
+        //   log('bgGreen', ` [ ${address} ] Properties changed. `);
+        //   Object.entries(props).forEach((key, val) => {
+        //     log('textGreen', `${key} : ${val}`);
+        //   })
+        //   const paired: boolean | undefined = props?.Paired;
+        //   const connected: boolean | undefined = props?.Connected;
+        //   if(paired != undefined || connected != undefined) {
+        //     log('textGreen', `[ ${address} ] Connection status changed.`);
+        //   }
+        // });
+        // Pair with the device if not already done
+        if (!props.Paired) {
+          await device.Pair().catch(async (err) => {
+            console.error("Error while pairing to device " + address + ": " + err.message);
+            if(err.message == 'Page Timeout') {
+              log('bgRed', ` Page Timeout detected ${address} removing device. `);
+              this.removeDevice(address);
+            }
+          });
+        } else {
+          log('textGreen', ` ${address} - already paired. `);
         }
-      });
-      // Pair with the device if not already done
-      if (!props.Paired) {
-        await device.Pair().catch(async (err) => {
-          console.error("Error while pairing to device " + address + ": " + err.message);
-          if(err.message == 'Page Timeout') {
-            log('bgRed', ` Page Timeout detected ${address} removing device. `);
-            this.removeDevice(address);
-          }
-        });
-      } else {
-        log('textGreen', ` ${address} - already paired. `);
-      }
-      // Connect with device if not already
-      if(!props.Connected) {
-        log('textGreen', " Unconnected Light Found spawning port... ");
-        this.spawnRfcomm(address);
-      } else {
-        log('textGreen', ` ${address} - already connected. `);
+        // Connect with device if not already
+        if(!props.Connected) {
+          log('textGreen', " Unconnected Light Found spawning port... ");
+          this.spawnRfcomm(address);
+        } else {
+          log('textGreen', ` ${address} - already connected. `);
+        }
+      } catch {
+        log('textRed', `Error: Device ${address} not found.`)
       }
     }
   }

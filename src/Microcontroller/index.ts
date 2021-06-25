@@ -138,7 +138,9 @@ export class Microcontroller implements MicroActionsInterface {
         return newId;
       });
       const {brightness, segmentBoundaries, totalLEDs} = micros.byId[0];
+      const alias = String(newMicroId);
       const newMicro = {
+        alias,
         totalLEDs,
         brightness,
         segmentBoundaries,
